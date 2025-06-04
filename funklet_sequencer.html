@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8" />
+    <title>Funklet Audio Sequencer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani&display=swap" rel="stylesheet">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: black;
+            overflow-x: hidden;
+            
+        }
+
+
+        #main-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #canvas-container {
+            width: 864px;
+            height: 864px;
+            background: url('base.png') no-repeat center center;
+            background-size: cover;
+            position: relative;
+            margin-top: 5px;
+        }
+
+        #overlay-image {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 960px; /* ← ← ← ここで大きくする（例：864 → 950） */
+            height: 990px;
+            transform: translate(-50%, -50%);
+            z-index: 9999;
+            pointer-events: none;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #sequencer-ui {
+            width: 960px;
+            height: 540px;
+            background: url('sequencer base.png') no-repeat center center;
+            background-size: cover;
+            position: relative;
+            margin-top: 40px;
+        }
+
+        .grid {
+            position: absolute;
+            top: 160px;
+            left: 180px;
+            width: 600px;
+            height: 210px;
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            grid-template-rows: repeat(5, 1fr);
+            gap: 2px;
+        }
+
+        .cell {
+            background-size: 330%;
+            background-repeat: no-repeat;
+            background-position: center;
+            transition: filter 0.1s, opacity 0.2s;
+            cursor: pointer;
+        }
+
+            .cell.velocity-0 {
+                background-image: url('button 1.png');
+                opacity: 0.4;
+                filter: brightness(25%);
+                mix-blend-mode: multiply;
+            }
+
+            .cell.velocity-1 {
+                background-image: url('button 1.png');
+                opacity: 1;
+                filter: brightness(100%);
+                mix-blend-mode: normal;
+            }
+
+            .cell.velocity-2 {
+                background-image: url('button 2.png');
+                opacity: 1;
+                filter: brightness(100%);
+                mix-blend-mode: normal;
+            }
+
+            .cell.velocity-3 {
+                background-image: url('button 3.png');
+                opacity: 1;
+                filter: brightness(100%);
+                mix-blend-mode: normal;
+            }
+
+            .cell.flash {
+                filter: brightness(200%) !important;
+            }
+
+        .playhead {
+            position: absolute;
+            bottom: 100px;
+            left: 190px;
+            display: flex;
+            gap: 26px;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #999;
+            transition: background-color 0.2s;
+        }
+
+            .dot.active {
+                background-color: red;
+            }
+
+        .controls {
+            position: absolute;
+            bottom: 75px;
+            left: 30px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .control-button {
+            width: 60px;
+            height: 60px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+            .control-button:hover {
+                transform: scale(1.1);
+            }
+
+        .bpm-ui {
+            position: absolute;
+            bottom: 20px;
+            right: -50px;
+            width: 250px;
+            height: 100px;
+        }
+
+            .bpm-ui img.logo {
+                position: absolute;
+                top: 0;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 180px;
+                height: auto;
+                z-index: 2;
+            }
+
+            .bpm-ui img.base {
+                position: absolute;
+                top: 54px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 200px;
+                height: auto;
+                z-index: 1;
+            }
+
+        #bpmSlider {
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 190px;
+            background: transparent;
+            -webkit-appearance: none;
+            z-index: 3;
+        }
+
+            #bpmSlider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                background: url('BPM tumami.png') no-repeat center;
+                background-size: contain;
+                width: 40px;
+                height: 40px;
+                border: none;
+                cursor: pointer;
+            }
+
+            #bpmSlider::-moz-range-thumb {
+                background: url('BPM tumami.png') no-repeat center;
+                background-size: contain;
+                width: 40px;
+                height: 40px;
+                border: none;
+                cursor: pointer;
+            }
+        #logo-banner {
+            padding-top: 0px; /* ← ここで上だけ詰める！ */
+            padding-bottom: 10px; /* ← 下はそのままキープ */
+            text-align: center;
+            background-color: black;
+            position: relative;
+        }
+
+            #logo-banner img {
+                height: 260px; /* ← ここだけいじればOK！ */
+                object-fit: contain;
+                display: block; /* ↓ これで上下の変な隙間も潰せる */
+                margin: 0 auto;
+            }
+
+
+
+        #bpmValueDisplay {
+            position: absolute;
+            top: 25px;
+            right: 30px;
+            font-size: 20px;
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            z-index: 4;
+        }
+       
+
+    </style>
+</head>
+<body>
+    <div id="logo-banner">
+        <img src="logo.png" alt="TRA808 Logo">
+    </div>
+
+    <div id="main-container">
+        <div id="canvas-container">
+            <canvas id="animationCanvas" width="864" height="864"></canvas>
+
+            <img id="overlay-image" src="cover.png" alt="Overlay">
+
+        </div>
+        <div id="sequencer-ui">
+            <div class="grid" id="grid"></div>
+            <div class="playhead" id="playhead"></div>
+            <div class="controls">
+                <img id="startBtn" src="start button.png" class="control-button" alt="start">
+                <img id="stopBtn" src="stop button.png" class="control-button" alt="stop">
+            </div>
+            <div class="bpm-ui">
+                <img class="base" src="BPM base.png" alt="BPM Base">
+                <img class="logo" src="BPM logo.png" alt="BPM Logo">
+                <input type="range" id="bpmSlider" min="60" max="240" value="120">
+                <div id="bpmValueDisplay">120</div>
+            </div>
+        </div>
+
+
+    </div>
+    <div id="fpsCounter" style="position: fixed; top: 10px; right: 10px; color: lime; font-size: 16px; font-family: monospace; z-index: 9999;">
+        FPS: --
+    </div>
+
+    <>
+    <script>
+
+        function convertToCanvasImage(img) {
+            const offscreen = document.createElement('canvas');
+            offscreen.width = img.width;
+            offscreen.height = img.height;
+            const ctx = offscreen.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            return offscreen;
+        }
+
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffers = [];
+        let isPlaying = false;
+        let schedulerId = null;
+
+        async function loadAudioFiles() {
+            const urls = [
+                'sound/808_kick.wav',
+                'sound/808_snare.wav',
+                'sound/808_hihat.wav',
+                'sound/808_clap.wav',
+                'sound/808_cowbell.wav'
+            ];
+
+            for (const url of urls) {
+                const response = await fetch(url);
+                const arrayBuffer = await response.arrayBuffer();
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                audioBuffers.push(audioBuffer);
+            }
+        }
+
+        function playSound(index, velocity, time) {
+            if (!audioBuffers[index]) return;
+            const source = audioContext.createBufferSource();
+            source.buffer = audioBuffers[index];
+
+            const gainNode = audioContext.createGain();
+            gainNode.gain.value = velocity / 3;
+
+            source.connect(gainNode).connect(audioContext.destination);
+            source.start(time);
+        }
+
+        const gridEl = document.getElementById('grid');
+        const playheadEl = document.getElementById('playhead');
+        const steps = 16;
+        const rows = 5;
+        const cells = [];
+        const dots = [];
+
+        for (let y = 0; y < rows; y++) {
+            cells[y] = [];
+            for (let x = 0; x < steps; x++) {
+                const div = document.createElement('div');
+                div.classList.add('cell', 'velocity-0');
+                div.dataset.row = y;
+                div.dataset.col = x;
+                div.dataset.velocity = '0';
+                div.addEventListener('click', () => {
+                    let v = parseInt(div.dataset.velocity);
+                    v = (v + 1) % 4;
+                    div.dataset.velocity = v;
+                    div.classList.remove('velocity-0', 'velocity-1', 'velocity-2', 'velocity-3');
+                    div.classList.add(`velocity-${v}`);
+                });
+                gridEl.appendChild(div);
+                cells[y][x] = div;
+            }
+        }
+
+        for (let i = 0; i < steps; i++) {
+            const dot = document.createElement('div');
+            dot.classList.add('dot');
+            playheadEl.appendChild(dot);
+            dots.push(dot);
+        }
+
+        let bpm = 120;
+        let stepIndex = 0;
+        const bpmSlider = document.getElementById('bpmSlider');
+        const bpmDisplay = document.getElementById('bpmValueDisplay');
+
+        let nextNoteTime = 0.0;
+        const scheduleAheadTime = 0.1; // seconds
+        const interval = 25; // ms
+
+        function scheduleNote(time) {
+            dots.forEach((dot, i) => {
+                dot.classList.toggle('active', i === stepIndex);
+            });
+
+            for (let row = 0; row < rows; row++) {
+                const cell = cells[row][stepIndex];
+                const velocity = parseInt(cell.dataset.velocity);
+                if (velocity > 0) {
+                    let offset = grooveOffsets[row];
+                    playSound(row, velocity, time + offset);
+                    cell.classList.add('flash');
+                    setTimeout(() => {
+                        cell.classList.remove('flash');
+                    }, 100);
+
+                    if (row === 0) {
+                        isAsiTriggered = true;
+                        asiTriggerFrameIndex = 0;
+
+                        isYukaTriggered = true;
+                        yukaTriggerFrameIndex = 0;
+
+                        if (velocity === 2) {
+                            isKick2EffectTriggered = true;
+                            kick2EffectFrameIndex = 0;
+                        }
+                        if (velocity === 3) {
+                            isKick3EffectTriggered = true;
+                            kick3EffectFrameIndex = 0;
+                        }
+                    }
+
+                    if (row === 1) {
+                        isRhandTriggered = true;
+                        rhandTriggerFrameIndex = 0;
+
+                        isRdrumTriggered = true;
+                        rdrumTriggerFrameIndex = 0;
+
+                        if (velocity === 2) {
+                            isSnare2EffectTriggered = true;
+                            snare2EffectFrameIndex = 0;
+                        }
+
+                        if (velocity === 3) {
+                            isSnare3EffectTriggered = true;
+                            snare3EffectFrameIndex = 0;
+                        }
+                    }
+
+                    if (row === 2) {
+                        isLhandTriggered = true;
+                        lhandTriggerFrameIndex = 0;
+
+                        isLdrumTriggered = true;
+                        ldrumTriggerFrameIndex = 0;
+
+                        // velocity 2
+                        if (velocity === 2) {
+                            isHihat2EffectTriggered = true;
+                            hihat2EffectFrameIndex = 0;
+                        }
+
+                        // velocity 3
+                        if (velocity === 3) {
+
+
+                            isHihat3EffectTriggered = true;
+                            hihat3EffectFrameIndex = 0;
+                        }
+                    }
+
+
+                    if (row === 3) {
+                        isUenoteClapTriggered = true;
+                        uenoteClapTriggerFrameIndex = 0;
+
+                        if (velocity === 2) {
+                            isClap2EffectTriggered = true;
+                            clap2EffectFrameIndex = 0;
+                        }
+
+                        if (velocity === 3) {
+                            isClap3EffectTriggered = true;
+                            clap3EffectFrameIndex = 0;
+                        }
+                    }
+
+                    if (row === 4) {
+                        isUenoteCowbellTriggered = true;
+                        uenoteCowbellTriggerFrameIndex = 0;
+
+                        if (velocity === 2) {
+                            isCowbell2EffectTriggered = true;
+                            cowbell2EffectFrameIndex = 0;
+                        }
+                        if (velocity === 3) {
+
+
+                            isCowbell3EffectTriggered = true;
+                            cowbell3EffectFrameIndex = 0;
+                        }
+                    }
+
+
+
+
+
+
+                }
+            }
+
+            if ([0, 4, 8, 12].includes(stepIndex)) {
+                headCountTriggered = true;
+                headCountFrameIndex = 0;
+            }
+
+
+            stepIndex = (stepIndex + 1) % steps;
+        }
+
+        function scheduler() {
+            if (!isPlaying) return;
+
+            while (nextNoteTime < audioContext.currentTime + scheduleAheadTime) {
+                scheduleNote(nextNoteTime);
+                const secondsPerBeat = 60.0 / bpm;
+                nextNoteTime += secondsPerBeat / 4;
+            }
+            schedulerId = setTimeout(scheduler, interval);
+        }
+
+        function updateBPM(newBPM) {
+            bpm = parseInt(newBPM);
+            bpmDisplay.textContent = bpm;
+        }
+
+        bpmSlider.addEventListener('input', e => {
+            updateBPM(e.target.value);
+        });
+
+        document.getElementById('startBtn').addEventListener('click', () => {
+            if (isPlaying) return;
+            isPlaying = true;
+            audioContext.resume();
+            nextNoteTime = audioContext.currentTime;
+            scheduler();
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            isPlaying = false;
+            if (schedulerId) clearTimeout(schedulerId);
+
+            dots.forEach(dot => dot.classList.remove('active'));
+            stepIndex = 0;
+
+            headCountTriggered = false;
+            headCountFrameIndex = 0;
+
+        });
+
+        updateBPM(bpm);
+        loadAudioFiles();
+
+
+
+
+
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 各レイヤーのフレームとインデックス
+        const yukaFrames = [], asiFrames = [], uenoteFrames = [], rhandFrames = [], lhandFrames = [], bodyFrames = [], ldrumFrames = [], rdrumFrames = [];
+        let yukaFrameIndex = 0, asiFrameIndex = 0, uenoteFrameIndex = 0, rhandFrameIndex = 0, lhandFrameIndex = 0, bodyFrameIndex = 0, ldrumFrameIndex = 0, rdrumFrameIndex = 0;
+        // 🥇 最初に1回だけ、上のほうに書く（グローバル変数として）
+        let prevRhandFrame = null;
+
+        // head は stay/close の2種を切り替え制御
+        const headStayFrames = [], headCloseFrames = [];
+        let headFrameIndex = 0;
+        let isHeadClosing = false;
+
+
+        // フレーム数定義
+
+        // clap_3: velocity-3 用の視覚エフェクト
+        const clap3EffectFrames = [];
+        const clap3EffectFrameCount = 9;
+        let clap3EffectFrameIndex = 0;
+        let isClap3EffectTriggered = false;
+
+        for (let i = 1; i <= clap3EffectFrameCount; i++) {
+            const img = new Image();
+            img.src = `clap_3/clap_3_${String(i).padStart(2, '0')}.png`;
+            clap3EffectFrames.push(img);
+        }
+
+
+        // clap_2: velocity-2 用の視覚エフェクト
+
+        const clap2EffectFrames = [];
+        const clap2EffectFrameCount = 14;
+        let clap2EffectFrameIndex = 0;
+        let isClap2EffectTriggered = false;
+
+        for (let i = 1; i <= clap2EffectFrameCount; i++) {
+            const img = new Image();
+            img.src = `clap_2/clap_2_${String(i).padStart(2, '0')}.png`;
+            clap2EffectFrames.push(img);
+        }
+        // kick velocity 2
+        const kick2EffectFrames = [];
+        const kick2EffectFrameCount = 8;
+        let kick2EffectFrameIndex = 0;
+        let isKick2EffectTriggered = false;
+
+        for (let i = 1; i <= kick2EffectFrameCount; i++) {
+            const img = new Image();
+            img.src = `kick_2/kick_2_${String(i).padStart(2, '0')}.png`;
+            kick2EffectFrames.push(img);
+        }
+
+        // kick velocity 3
+        const kick3EffectFrames = [];
+        const kick3EffectFrameCount = 14;
+        let kick3EffectFrameIndex = 0;
+        let isKick3EffectTriggered = false;
+
+        for (let i = 1; i <= kick3EffectFrameCount; i++) {
+            const img = new Image();
+            img.src = `kick_3/kick_3_${String(i).padStart(2, '0')}.png`;
+            kick3EffectFrames.push(img);
+        }
+        // snare velocity 2
+        const snare2EffectFrames = [];
+        const snare2EffectFrameCount = 7;
+        let snare2EffectFrameIndex = 0;
+        let isSnare2EffectTriggered = false;
+
+        for (let i = 1; i <= snare2EffectFrameCount; i++) {
+            const img = new Image();
+            img.src = `snare_2/snare_2_${String(i).padStart(2, '0')}.png`;
+            snare2EffectFrames.push(img);
+        }
+
+        // snare velocity 3
+        const snare3EffectFrames = [];
+        const snare3EffectFrameCount = 22;
+        let snare3EffectFrameIndex = 0;
+        let isSnare3EffectTriggered = false;
+
+        for (let i = 1; i <= snare3EffectFrameCount; i++) {
+            const img = new Image();
+            img.src = `snare_3/snare_3_${String(i).padStart(2, '0')}.png`;
+            snare3EffectFrames.push(img);
+        }
+
+
+        const yukaFrameCount = 24;
+        const yukaTriggerFrames = [];
+        const yukaTriggerFrameCount = 10;
+        let yukaTriggerFrameIndex = 0;
+        let isYukaTriggered = false;
+
+        for (let i = 1; i <= yukaTriggerFrameCount; i++) {
+            const img = new Image();
+            img.src = `yuka_triger/yuka_triger_${String(i).padStart(2, '0')}.webp`;
+            yukaTriggerFrames.push(img);
+        }
+        const cowbell2EffectFrames = [];
+        const cowbell2EffectFrameCount = 9;
+        let cowbell2EffectFrameIndex = 0;
+        let isCowbell2EffectTriggered = false;
+
+        for (let i = 1; i <= cowbell2EffectFrameCount; i++) {
+            const img = new Image();
+            img.src = `cow_2/cow_2_${String(i).padStart(2, '0')}.png`;
+            cowbell2EffectFrames.push(img);
+        }
+        const cowbell3EffectFrames = [];
+        const cowbell3EffectFrameCount = 20;
+        let cowbell3EffectFrameIndex = 0;
+        let isCowbell3EffectTriggered = false;
+
+        for (let i = 1; i <= cowbell3EffectFrameCount; i++) {
+            const img = new Image();
+            img.src = `cow_3/cow_3_${String(i).padStart(2, '0')}.png`;
+            cowbell3EffectFrames.push(img);
+        }
+        // hihat_2
+        const hihat2EffectFrames = [];
+        const hihat2EffectFrameCount = 5;
+        let hihat2EffectFrameIndex = 0;
+        let isHihat2EffectTriggered = false;
+
+        for (let i = 1; i <= 5; i++) {
+            const img = new Image();
+            img.src = `hihat_2/hihat_2_${String(i).padStart(2, '0')}.png`; // ←ここが重要
+            hihat2EffectFrames.push(img);
+        }
+
+
+        // hihat_3
+        const hihat3EffectFrames = [];
+        const hihat3EffectFrameCount = 13;
+        let hihat3EffectFrameIndex = 0;
+        let isHihat3EffectTriggered = false;
+
+        for (let i = 1; i <= hihat3EffectFrameCount; i++) {
+            const img = new Image();
+            img.src = `hihat_3/hihat_3_${String(i).padStart(2, '0')}.png`;
+            hihat3EffectFrames.push(img);
+        }
+
+
+
+        const asiFrameCount = 27;
+
+        const asiTriggerFrames = [];
+        const asiTriggerFrameCount = 13;
+        let asiTriggerFrameIndex = 0;
+        let isAsiTriggered = false;
+
+        const headCountFrames = [];
+        let headCountFrameIndex = 0;
+        const headCountFrameCount = 7;
+        let headCountTriggered = false;
+
+        const uenoteFrameCount = 24;
+        const uenoteClapTriggerFrames = [];
+        const uenoteClapTriggerFrameCount = 9;
+        let uenoteClapTriggerFrameIndex = 0;
+        let isUenoteClapTriggered = false;
+
+        for (let i = 1; i <= uenoteClapTriggerFrameCount; i++) {
+            const img = new Image();
+            img.src = `clap/clap_${String(i).padStart(2, '0')}.png`;
+            uenoteClapTriggerFrames.push(img);
+        }
+        const uenoteCowbellTriggerFrames = [];
+        const uenoteCowbellTriggerFrameCount = 12; // cowbell_01.png ～ cowbell_12.png
+        let uenoteCowbellTriggerFrameIndex = 0;
+        let isUenoteCowbellTriggered = false;
+
+        for (let i = 1; i <= uenoteCowbellTriggerFrameCount; i++) {
+            const img = new Image();
+            img.src = `cowbell/cowbell_${String(i).padStart(2, '0')}.png`;
+            uenoteCowbellTriggerFrames.push(img);
+        }
+
+
+        const rhandFrameCount = 24;
+        const rhandTriggerFrames = [];
+        const rhandTriggerFrameCount = 7;
+        let rhandTriggerFrameIndex = 0;
+        let isRhandTriggered = false;
+
+        for (let i = 1; i <= rhandTriggerFrameCount; i++) {
+            const img = new Image();
+            img.src = `R_hand_triger/R_hand_triger_${String(i).padStart(2, '0')}.png`;
+            rhandTriggerFrames.push(img);
+        }
+
+        const lhandFrameCount = 23;
+        const lhandTriggerFrames = [];
+        const lhandTriggerFrameCount = 7;
+        let lhandTriggerFrameIndex = 0;
+        let isLhandTriggered = false;
+
+        for (let i = 1; i <= lhandTriggerFrameCount; i++) {
+            const img = new Image();
+            img.src = `L_hand_triger/L_hand_triger_${String(i).padStart(2, '0')}.png`;
+            lhandTriggerFrames.push(img);
+        }
+
+        const bodyFrameCount = 24;
+        const headStayCount = 23;
+        const headCloseCount = 4;
+        const ldrumFrameCount = 26;
+        const ldrumTriggerFrames = [];
+        const ldrumTriggerFrameCount = 9;
+        let ldrumTriggerFrameIndex = 0;
+        let isLdrumTriggered = false;
+
+        for (let i = 1; i <= ldrumTriggerFrameCount; i++) {
+            const img = new Image();
+            img.src = `L_drum_triger/L_drum_triger_${String(i).padStart(2, '0')}.png`;
+            ldrumTriggerFrames.push(img);
+        }
+
+        const rdrumFrameCount = 26;
+        const rdrumTriggerFrames = [];
+        const rdrumTriggerFrameCount = 9;
+        let rdrumTriggerFrameIndex = 0;
+        let isRdrumTriggered = false;
+
+        for (let i = 1; i <= rdrumTriggerFrameCount; i++) {
+            const img = new Image();
+            img.src = `R_drum_triger/R_drum_triger_${String(i).padStart(2, '0')}.png`;
+            rdrumTriggerFrames.push(img);
+        }
+
+
+        const frameDelay = 1000 / 24;
+        let lastFrameTime = 0;
+        let fpsCounter = 0;
+        let fpsLastTime = performance.now();
+        let currentFps = 0;
+
+
+
+        // head_close をランダム秒ごとにトリガーする
+        function scheduleNextHeadClose() {
+            const delay = Math.floor(Math.random() * 4000) + 3000; // 3秒〜7秒の間
+            setTimeout(() => {
+                if (!isHeadClosing) {
+                    isHeadClosing = true;
+                    headFrameIndex = 0;
+                }
+                scheduleNextHeadClose(); // 再スケジューリング
+            }, delay);
+        }
+
+        scheduleNextHeadClose(); // 最初の呼び出し
+
+
+        // 読み込み処理
+        for (let i = 1; i <= yukaFrameCount; i++) {
+            const img = new Image();
+            img.src = `yuka_stay/yuka_stay_${String(i).padStart(2, '0')}.webp`;
+            yukaFrames.push(img);
+        }
+        for (let i = 1; i <= asiFrameCount; i++) {
+            const img = new Image();
+            img.src = `asi_stay/asi_stay_${String(i).padStart(2, '0')}.png`;
+            asiFrames.push(img);
+        }
+
+        for (let i = 1; i <= asiTriggerFrameCount; i++) {
+            const img = new Image();
+            img.src = `asi_triger/asi_triger_${String(i).padStart(2, '0')}.png`;
+            asiTriggerFrames.push(img);
+        }
+
+        for (let i = 1; i <= uenoteFrameCount; i++) {
+            const img = new Image();
+            img.src = `uenote/uenote_${String(i).padStart(2, '0')}.webp`;
+            uenoteFrames.push(img);
+        }
+        for (let i = 1; i <= rhandFrameCount; i++) {
+            const img = new Image();
+            img.src = `R_hand_stay/R_hand_stay_${String(i).padStart(2, '0')}.png`;
+            rhandFrames.push(img);
+        }
+        for (let i = 1; i <= lhandFrameCount; i++) {
+            const img = new Image();
+            img.src = `L_hand_stay/L_hand_stay_${String(i).padStart(2, '0')}.png`;
+            lhandFrames.push(img);
+        }
+        for (let i = 1; i <= bodyFrameCount; i++) {
+            const img = new Image();
+            img.src = `body/body_${String(i).padStart(2, '0')}.png`;
+            bodyFrames.push(img);
+        }
+        for (let i = 1; i <= headStayCount; i++) {
+            const img = new Image();
+            img.src = `head_stay/head_stay_${String(i).padStart(2, '0')}.png`;
+            headStayFrames.push(img);
+        }
+        for (let i = 1; i <= headCloseCount; i++) {
+            const img = new Image();
+            img.src = `head_close/head_close_${String(i).padStart(2, '0')}.png`;
+            headCloseFrames.push(img);
+        }
+        for (let i = 1; i <= headCountFrameCount; i++) {
+            const img = new Image();
+            img.src = `head_count/head_count_${String(i).padStart(2, '0')}.png`;
+            headCountFrames.push(img);
+        }
+        for (let i = 1; i <= ldrumFrameCount; i++) {
+            const img = new Image();
+            img.src = `L_drum_stay/L_drum_stay_${String(i).padStart(2, '0')}.png`;
+            ldrumFrames.push(img);
+        }
+        for (let i = 1; i <= rdrumFrameCount; i++) {
+            const img = new Image();
+            img.src = `R_drum_stay/R_drum_stay_${String(i).padStart(2, '0')}.png`;
+            rdrumFrames.push(img);
+        }
+
+        // 描画ループ
+        function drawAnimationFrame(timestamp) {
+            if (!lastFrameTime || timestamp - lastFrameTime > frameDelay) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                const layersToDraw = [];
+
+                // --- 個別処理：エフェクト系 ---
+                if (isClap3EffectTriggered) {
+                    const frame = clap3EffectFrames[clap3EffectFrameIndex];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    clap3EffectFrameIndex++;
+                    if (clap3EffectFrameIndex >= clap3EffectFrameCount) {
+                        isClap3EffectTriggered = false;
+                        clap3EffectFrameIndex = 0;
+                    }
+                }
+
+                if (isKick3EffectTriggered) {
+                    const frame = kick3EffectFrames[kick3EffectFrameIndex];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    kick3EffectFrameIndex++;
+                    if (kick3EffectFrameIndex >= kick3EffectFrameCount) {
+                        isKick3EffectTriggered = false;
+                        kick3EffectFrameIndex = 0;
+                    }
+                }
+
+                if (isKick2EffectTriggered) {
+                    const frame = kick2EffectFrames[kick2EffectFrameIndex];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    kick2EffectFrameIndex++;
+                    if (kick2EffectFrameIndex >= kick2EffectFrameCount) {
+                        isKick2EffectTriggered = false;
+                        kick2EffectFrameIndex = 0;
+                    }
+                }
+
+
+
+
+                if (isHihat2EffectTriggered) {
+                    const frame = hihat2EffectFrames[hihat2EffectFrameIndex];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    hihat2EffectFrameIndex++;
+                    if (hihat2EffectFrameIndex >= hihat2EffectFrameCount) {
+                        isHihat2EffectTriggered = false;
+                        hihat2EffectFrameIndex = 0;
+                    }
+                }
+
+                if (isHihat3EffectTriggered) {
+                    const frame = hihat3EffectFrames[hihat3EffectFrameIndex];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    hihat3EffectFrameIndex++;
+                    if (hihat3EffectFrameIndex >= hihat3EffectFrameCount) {
+                        isHihat3EffectTriggered = false;
+                        hihat3EffectFrameIndex = 0;
+                    }
+                }
+
+                if (isClap2EffectTriggered) {
+                    const frame = clap2EffectFrames[clap2EffectFrameIndex];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    clap2EffectFrameIndex++;
+                    if (clap2EffectFrameIndex >= clap2EffectFrameCount) {
+                        isClap2EffectTriggered = false;
+                        clap2EffectFrameIndex = 0;
+                    }
+                }
+
+                if (isCowbell2EffectTriggered) {
+                    const frame = cowbell2EffectFrames[cowbell2EffectFrameIndex];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    cowbell2EffectFrameIndex++;
+                    if (cowbell2EffectFrameIndex >= cowbell2EffectFrameCount) {
+                        isCowbell2EffectTriggered = false;
+                        cowbell2EffectFrameIndex = 0;
+                    }
+                }
+
+                if (isCowbell3EffectTriggered) {
+                    const frame = cowbell3EffectFrames[cowbell3EffectFrameIndex];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    cowbell3EffectFrameIndex++;
+                    if (cowbell3EffectFrameIndex >= cowbell3EffectFrameCount) {
+                        isCowbell3EffectTriggered = false;
+                        cowbell3EffectFrameIndex = 0;
+                    }
+                }
+                if (isSnare2EffectTriggered) {
+                    const frame = snare2EffectFrames[snare2EffectFrameIndex];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    snare2EffectFrameIndex++;
+                    if (snare2EffectFrameIndex >= snare2EffectFrameCount) {
+                        isSnare2EffectTriggered = false;
+                        snare2EffectFrameIndex = 0;
+                    }
+                }
+                if (isSnare3EffectTriggered) {
+                    const frame = snare3EffectFrames[snare3EffectFrameIndex];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    snare3EffectFrameIndex++;
+                    if (snare3EffectFrameIndex >= snare3EffectFrameCount) {
+                        isSnare3EffectTriggered = false;
+                        snare3EffectFrameIndex = 0;
+                    }
+                }
+
+                // （以下同様に他のエフェクトも個別に処理してOK）
+
+                // --- 通常アニメ ---
+                const yukaFrame = isYukaTriggered ? yukaTriggerFrames[yukaTriggerFrameIndex++] : yukaFrames[yukaFrameIndex++ % yukaFrameCount];
+                if (yukaFrame?.complete) layersToDraw.push(yukaFrame);
+                if (isYukaTriggered && yukaTriggerFrameIndex >= yukaTriggerFrameCount) {
+                    isYukaTriggered = false;
+                    yukaTriggerFrameIndex = 0;
+                }
+
+                const asiFrame = isAsiTriggered ? asiTriggerFrames[asiTriggerFrameIndex++] : asiFrames[asiFrameIndex++ % asiFrameCount];
+                if (asiFrame?.complete) layersToDraw.push(asiFrame);
+                if (isAsiTriggered && asiTriggerFrameIndex >= asiTriggerFrameCount) {
+                    isAsiTriggered = false;
+                    asiTriggerFrameIndex = 0;
+                }
+
+                const uenoteFrame = isUenoteClapTriggered
+                    ? uenoteClapTriggerFrames[uenoteClapTriggerFrameIndex++]
+                    : (isUenoteCowbellTriggered
+                        ? uenoteCowbellTriggerFrames[uenoteCowbellTriggerFrameIndex++]
+                        : uenoteFrames[uenoteFrameIndex++ % uenoteFrameCount]);
+                if (uenoteFrame?.complete) layersToDraw.push(uenoteFrame);
+
+                if (isUenoteClapTriggered && uenoteClapTriggerFrameIndex >= uenoteClapTriggerFrameCount) {
+                    isUenoteClapTriggered = false;
+                    uenoteClapTriggerFrameIndex = 0;
+                }
+                if (isUenoteCowbellTriggered && uenoteCowbellTriggerFrameIndex >= uenoteCowbellTriggerFrameCount) {
+                    isUenoteCowbellTriggered = false;
+                    uenoteCowbellTriggerFrameIndex = 0;
+                }
+
+                const rhandFrame = isRhandTriggered ? rhandTriggerFrames[rhandTriggerFrameIndex++] : rhandFrames[rhandFrameIndex++ % rhandFrameCount];
+                if (rhandFrame?.complete) layersToDraw.push(rhandFrame);
+                if (isRhandTriggered && rhandTriggerFrameIndex >= rhandTriggerFrameCount) {
+                    isRhandTriggered = false;
+                    rhandTriggerFrameIndex = 0;
+                }
+
+                const lhandFrame = isLhandTriggered ? lhandTriggerFrames[lhandTriggerFrameIndex++] : lhandFrames[lhandFrameIndex++ % lhandFrameCount];
+                if (lhandFrame?.complete) layersToDraw.push(lhandFrame);
+                if (isLhandTriggered && lhandTriggerFrameIndex >= lhandTriggerFrameCount) {
+                    isLhandTriggered = false;
+                    lhandTriggerFrameIndex = 0;
+                }
+
+                const bodyFrame = bodyFrames[bodyFrameIndex++ % bodyFrameCount];
+                if (bodyFrame?.complete) layersToDraw.push(bodyFrame);
+
+                const ldrumFrame = isLdrumTriggered ? ldrumTriggerFrames[ldrumTriggerFrameIndex++] : ldrumFrames[ldrumFrameIndex++ % ldrumFrameCount];
+                if (ldrumFrame?.complete) layersToDraw.push(ldrumFrame);
+                if (isLdrumTriggered && ldrumTriggerFrameIndex >= ldrumTriggerFrameCount) {
+                    isLdrumTriggered = false;
+                    ldrumTriggerFrameIndex = 0;
+                }
+
+                const rdrumFrame = isRdrumTriggered ? rdrumTriggerFrames[rdrumTriggerFrameIndex++] : rdrumFrames[rdrumFrameIndex++ % rdrumFrameCount];
+                if (rdrumFrame?.complete) layersToDraw.push(rdrumFrame);
+                if (isRdrumTriggered && rdrumTriggerFrameIndex >= rdrumTriggerFrameCount) {
+                    isRdrumTriggered = false;
+                    rdrumTriggerFrameIndex = 0;
+                }
+
+                // head
+                if (headCountTriggered) {
+                    const frame = headCountFrames[headCountFrameIndex++];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    if (headCountFrameIndex >= headCountFrameCount) {
+                        headCountTriggered = false;
+                        headCountFrameIndex = 0;
+                    }
+                } else {
+                    const frame = (isHeadClosing ? headCloseFrames : headStayFrames)[headFrameIndex];
+                    if (frame?.complete) layersToDraw.push(frame);
+                    if (isHeadClosing) {
+                        headFrameIndex++;
+                        if (headFrameIndex >= headCloseCount) {
+                            isHeadClosing = false;
+                            headFrameIndex = 0;
+                        }
+                    } else {
+                        headFrameIndex = (headFrameIndex + 1) % headStayCount;
+                    }
+                }
+
+                // 一括描画
+                for (const img of layersToDraw) {
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                }
+
+                // FPSカウント
+                fpsCounter++;
+                const now = performance.now();
+                if (now - fpsLastTime >= 1000) {
+                    currentFps = fpsCounter;
+                    document.getElementById('fpsCounter').textContent = `FPS: ${currentFps}`;
+                    fpsCounter = 0;
+                    fpsLastTime = now;
+                }
+
+                lastFrameTime = timestamp;
+            }
+
+            requestAnimationFrame(drawAnimationFrame);
+        }
+
+
+        requestAnimationFrame(drawAnimationFrame);
+
+
+
+
+
+
+        const presets = {
+            "basic groove": [
+                [1, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0], // Kick
+                [0, 0, 3, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1, 0], // Snare
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], // HiHat
+                [0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0], // Clap
+                [0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0]  // Cowbell
+            ],
+            "off beat": [
+                [0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 2, 0, 0, 0, 3, 0],
+                [0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 1, 0, 0],
+                [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+                [0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0],
+                [3, 0, 0, 2, 0, 0, 1, 0, 0, 3, 0, 0, 2, 0, 0, 1]
+            ]
+        };
+
+        // プリセット適用関数
+        function applyPreset(name) {
+            if (!(name in presets)) return;
+            const preset = presets[name];
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < steps; col++) {
+                    const v = preset[row][col];
+                    const cell = cells[row][col];
+                    cell.dataset.velocity = v;
+                    cell.classList.remove('velocity-0', 'velocity-1', 'velocity-2', 'velocity-3');
+                    cell.classList.add(`velocity-${v}`);
+                }
+            }
+        }
+
+        // UI：プリセット選択ドロップダウン
+        const presetSelector = document.createElement('select');
+        presetSelector.style.position = 'absolute';
+        presetSelector.style.top = '20px';
+        presetSelector.style.left = '40px';
+        presetSelector.style.zIndex = '9999';
+        presetSelector.style.fontSize = '16px';
+        presetSelector.style.padding = '4px';
+
+        for (const name in presets) {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            presetSelector.appendChild(option);
+        }
+
+        const applyBtn = document.createElement('button');
+        applyBtn.textContent = 'Load Preset';
+        applyBtn.style.position = 'absolute';
+        applyBtn.style.top = '20px';
+        applyBtn.style.left = '180px';
+        applyBtn.style.zIndex = '9999';
+        applyBtn.style.fontSize = '16px';
+        applyBtn.style.padding = '4px 8px';
+
+        applyBtn.onclick = () => {
+            applyPreset(presetSelector.value);
+        };
+
+        document.body.appendChild(presetSelector);
+        document.body.appendChild(applyBtn);
+
+        const grooveOffsets = [0.015, 0.0, 0.0, -0.01, 0.0]; // 初期値：Kick, Snare, HiHat, Clap, Cowbell
+        const partNames = ["Kick", "Snare", "HiHat", "Clap", "Cowbell"];
+
+        const grooveControls = document.createElement('div');
+        grooveControls.style.position = 'absolute';
+        grooveControls.style.top = '1380px';
+        grooveControls.style.left = '220px';
+        grooveControls.style.color = 'white';
+        grooveControls.style.fontSize = '14px';
+        grooveControls.style.fontFamily = 'monospace';
+        grooveControls.style.zIndex = '9999';
+
+        partNames.forEach((name, index) => {
+            const label = document.createElement('label');
+            label.textContent = `${name}: `;
+            label.style.display = 'block';
+            label.style.marginBottom = '4px';
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.min = -0.05;
+            slider.max = 0.05;
+            slider.step = 0.001;
+            slider.value = grooveOffsets[index];
+            slider.style.width = '160px';
+            slider.oninput = (e) => {
+                grooveOffsets[index] = parseFloat(e.target.value);
+            };
+
+            const valueDisplay = document.createElement('span');
+            valueDisplay.textContent = ` ${slider.value}s`;
+            slider.addEventListener('input', () => {
+                valueDisplay.textContent = ` ${parseFloat(slider.value).toFixed(3)}s`;
+            });
+
+            label.appendChild(slider);
+            label.appendChild(valueDisplay);
+            grooveControls.appendChild(label);
+        });
+
+        document.body.appendChild(grooveControls);
+
+
+    </script>
+</body>
+</html>
