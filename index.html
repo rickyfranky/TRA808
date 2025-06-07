@@ -435,6 +435,8 @@
 
         function playSound(index, velocity, time) {
             if (!audioBuffers[index]) return;
+            if (isMuted[index]) return;
+          
             const source = audioContext.createBufferSource();
             source.buffer = audioBuffers[index];
 
@@ -445,12 +447,60 @@
             source.start(time);
         }
 
-        const gridEl = document.getElementById('grid');
+       
+
+
         const playheadEl = document.getElementById('playhead');
         const steps = 16;
         const rows = 5;
         const cells = [];
         const dots = [];
+
+        const gridEl = document.getElementById('grid');
+
+        // ▼ 右に表示するミュートボタン列
+        const muteColumn = document.createElement('div');
+        muteColumn.style.position = 'absolute';
+        muteColumn.style.top = gridEl.offsetTop + 'px';
+        muteColumn.style.left = (gridEl.offsetLeft + gridEl.offsetWidth + 10) + 'px';
+        muteColumn.style.width = '40px';
+        muteColumn.style.height = gridEl.offsetHeight + 'px';
+        muteColumn.style.display = 'flex';
+        muteColumn.style.flexDirection = 'column';
+        muteColumn.style.justifyContent = 'space-between';
+        muteColumn.style.alignItems = 'center';
+        muteColumn.style.zIndex = 10;
+
+        for (let row = 0; row < rows; row++) {
+            const muteBtn = document.createElement('img');
+            muteBtn.src = 'mute_off.png';
+            muteBtn.style.width = '30px';
+            muteBtn.style.height = '30px';
+            muteBtn.style.cursor = 'pointer';
+
+            muteBtn.onclick = () => {
+                isMuted[row] = !isMuted[row];
+                muteBtn.src = isMuted[row] ? 'mute_on.png' : 'mute_off.png';
+
+                for (let col = 0; col < steps; col++) {
+                    const cell = cells[row][col];
+                    if (cell) {
+                        if (isMuted[row]) {
+                            cell.style.opacity = 0.3;
+                        } else {
+                            const velocity = parseInt(cell.dataset.velocity) || 0;
+                            cell.style.opacity = '';
+                        }
+                    }
+                }
+
+            };
+
+            muteColumn.appendChild(muteBtn);
+        }
+
+        document.getElementById('sequencer-ui').appendChild(muteColumn);
+
 
         for (let y = 0; y < rows; y++) {
             cells[y] = [];
@@ -496,6 +546,10 @@
             for (let row = 0; row < rows; row++) {
                 const cell = cells[row][stepIndex];
                 const velocity = parseInt(cell.dataset.velocity);
+
+                if (isMuted[row]) continue; // ← ← ← 追加！！ アニメも鳴らさない！
+
+
                 if (velocity > 0) {
                     let offset = grooveOffsets[row];
                     playSound(row, velocity, time + offset);
@@ -1275,6 +1329,8 @@
 
 
         const grooveOffsets = [0, 0.0, 0.0, 0, 0.0]; // 初期値：Kick, Snare, HiHat, Clap, Cowbell
+        const isMuted = [false, false, false, false, false]; // 各音（行）のミュート状態
+
         const partNames = ["Kick", "Snare", "HiHat", "Clap", "Cowbell"];
 
         const grooveControls = document.createElement('div');
